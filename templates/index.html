@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Assisted Multilingual Transpiler</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/gh/jerosoler/Drawflow/dist/drawflow.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="brand">
+                <i class="fa-solid fa-microchip"></i>
+                <h2>Transpiler</h2>
+            </div>
+            
+            <ul class="nav-links">
+                <li class="active" data-mode="pseudocode" onclick="switchMode('pseudocode', this)">
+                    <i class="fa-solid fa-code"></i> Pseudocode
+                </li>
+                <li data-mode="tamil" onclick="switchMode('tamil', this)">
+                    <i class="fa-solid fa-language"></i> Tamil / Tanglish
+                </li>
+                <li data-mode="flowchart" onclick="switchMode('flowchart', this)">
+                    <i class="fa-solid fa-project-diagram"></i> Flowchart Builder
+                </li>
+            </ul>
+            
+            <div class="actions">
+                <button id="btn-compile" class="btn primary-btn"><i class="fa-solid fa-play"></i> Compile</button>
+                <button id="btn-execute" class="btn secondary-btn" disabled><i class="fa-solid fa-terminal"></i> Execute</button>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Top Section: Editor & Generated Code -->
+            <div class="top-pane" id="top-pane">
+                
+                <!-- Left: Editor -->
+                <div class="panel editor-panel" id="editor-panel">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-keyboard"></i> <span id="editor-title">Pseudocode Input</span></h3>
+                        <div class="badge" id="ai-indicator" style="display: none;">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> AI Fixed Error
+                        </div>
+                    </div>
+                    <div class="editor-container">
+                        <div class="line-numbers" id="editor-lines">1</div>
+                        <textarea id="source-code" spellcheck="false" class="code-box has-lines"></textarea>
+                    </div>
+                    
+                    <div class="panel-header mt-2">
+                        <h3><i class="fa-solid fa-input-text"></i> Standard Input (stdin)</h3>
+                    </div>
+                    <textarea id="stdin" class="small-textarea" placeholder="Provide input for READ/input() statements here..."></textarea>
+                </div>
+                
+                <!-- Flowchart Editor (Hidden by default) -->
+                <div class="panel flowchart-panel" id="flowchart-panel" style="display: none; flex: 1;">
+                    <div class="panel-header" style="justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-project-diagram"></i> Flowchart Canvas</h3>
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">Drag nodes from the palette into the canvas</span>
+                        </div>
+                        <button class="btn-secondary" style="font-size: 0.85rem; padding: 5px 15px;" onclick="toggleFlowchartPanels()"><i class="fa-solid fa-laptop-code"></i> Toggle Output Panels</button>
+                    </div>
+                    <div style="display: flex; flex: 1; min-height: 0;">
+                        <div class="node-palette" style="width: 150px; background: var(--bg-dark); border-right: 1px solid var(--border-color); padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="start" style="padding: 10px; background: #22c55e; color: #000; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">START</div>
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="input" style="padding: 10px; background: #3b82f6; color: #fff; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">INPUT</div>
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="output" style="padding: 10px; background: #3b82f6; color: #fff; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">OUTPUT</div>
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="process" style="padding: 10px; background: #a855f7; color: #fff; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">PROCESS</div>
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="decision" style="padding: 10px; background: #f59e0b; color: #fff; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">DECISION</div>
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="while" style="padding: 10px; background: #0d9488; color: #fff; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">WHILE</div>
+                            <div class="drag-drawflow" draggable="true" ondragstart="drag(event)" data-node="end" style="padding: 10px; background: #ef4444; color: #fff; border-radius: 5px; cursor: move; text-align: center; font-weight: bold;">END</div>
+                        </div>
+                        <div id="drawflow" style="flex: 1; width: 100%; height: 100%; position: relative;"></div>
+                    </div>
+                </div>
+                
+                <div class="gutter gutter-h" id="gutter-h"></div>
+                
+                <!-- Right: Generated Python & Diagnostics -->
+                <div class="panel output-panel" id="output-panel">
+                    <div class="panel-header">
+                        <h3><i class="fa-brands fa-python"></i> Python Output</h3>
+                        <span id="compile-status" class="status-badge">Ready</span>
+                    </div>
+                    <div class="editor-container">
+                        <div class="line-numbers" id="python-lines">1</div>
+                        <pre id="python-output" class="code-box has-lines">Generated python code will appear here...</pre>
+                    </div>
+                    
+                    <div class="panel-header mt-2">
+                        <h3><i class="fa-solid fa-terminal"></i> Execution Result</h3>
+                    </div>
+                    <pre id="execution-output" class="code-box console">Execute code to see output...</pre>
+                </div>
+                
+            </div>
+            
+            <div class="gutter gutter-v" id="gutter-v"></div>
+            
+            <!-- Pipeline Flowchart (Collapsible) -->
+            <div class="panel" style="margin-bottom: 20px;">
+                <div class="panel-header" style="cursor: pointer; background: transparent; border: none; display: flex; justify-content: space-between;" onclick="togglePipeline()">
+                    <h3><i class="fa-solid fa-route"></i> Compilation Pipeline</h3>
+                    <i class="fa-solid fa-chevron-down" id="pipeline-chevron" style="transition: transform 0.3s;"></i>
+                </div>
+                <div id="pipeline-container" style="display: none; padding: 0 15px 15px 15px;">
+                    <div id="pipeline-flow" class="pipeline-flow">
+                        <div class="pipeline-step" id="step-lex">
+                            <div class="step-icon"><i class="fa-solid fa-spell-check"></i></div>
+                            <div class="step-name">Lexical Analysis</div>
+                            <div class="step-detail" id="detail-lex">Waiting...</div>
+                        </div>
+                        <div class="pipeline-connector" id="conn-lex-parse"><span class="connector-label">Tokens</span></div>
+                        
+                        <div class="pipeline-step" id="step-parse">
+                            <div class="step-icon"><i class="fa-solid fa-code-branch"></i></div>
+                            <div class="step-name">Parsing</div>
+                            <div class="step-detail" id="detail-parse">Waiting...</div>
+                        </div>
+                        <div class="pipeline-connector" id="conn-parse-sem"><span class="connector-label">AST</span></div>
+                        
+                        <div class="pipeline-step" id="step-sem">
+                            <div class="step-icon"><i class="fa-solid fa-tags"></i></div>
+                            <div class="step-name">Semantic Analysis</div>
+                            <div class="step-detail" id="detail-sem">Waiting...</div>
+                        </div>
+                        <div class="pipeline-connector" id="conn-sem-ir"><span class="connector-label">Verified AST</span></div>
+                        
+                        <div class="pipeline-step" id="step-ai" style="display:none;">
+                            <div class="step-icon"><i class="fa-solid fa-robot"></i></div>
+                            <div class="step-name">AI Fix Engine</div>
+                            <div class="step-detail" id="detail-ai">Waiting...</div>
+                        </div>
+                        <div class="pipeline-connector" id="conn-ai-ir" style="display:none;"><span class="connector-label">Valid AST</span></div>
+                        
+                        <div class="pipeline-step" id="step-ir">
+                            <div class="step-icon"><i class="fa-solid fa-microchip"></i></div>
+                            <div class="step-name">IR Optimizer</div>
+                            <div class="step-detail" id="detail-ir">Waiting...</div>
+                        </div>
+                        <div class="pipeline-connector" id="conn-ir-gen"><span class="connector-label">TAC</span></div>
+
+                        <div class="pipeline-step" id="step-gen">
+                            <div class="step-icon"><i class="fa-brands fa-python"></i></div>
+                            <div class="step-name">Code Generation</div>
+                            <div class="step-detail" id="detail-gen">Waiting...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bottom Section: Diagnostics, Tokens, AI Insights -->
+            <div class="bottom-pane panel" id="bottom-pane" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="panel-header" onclick="toggleInspector()" style="cursor: pointer; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); padding: 5px 15px; display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; font-size: 0.9rem; color: var(--text-secondary);"><i class="fa-solid fa-microscope"></i> Compiler Inspector Tabs</h4>
+                    <i class="fa-solid fa-chevron-up" id="inspector-chevron"></i>
+                </div>
+                <div id="inspector-container" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="openTab('tab-diagnostics', this)"><i class="fa-solid fa-stethoscope"></i> Diagnostics</button>
+                        <button class="tab-btn" onclick="openTab('tab-symbols', this)"><i class="fa-solid fa-table"></i> Symbol Table</button>
+                        <button class="tab-btn" onclick="openTab('tab-ast', this)"><i class="fa-solid fa-network-wired"></i> AST & CFG</button>
+                        <button class="tab-btn" onclick="openTab('tab-ir', this)"><i class="fa-solid fa-microchip"></i> TAC & IR</button>
+                        <button class="tab-btn" onclick="openTab('tab-tokens', this)"><i class="fa-solid fa-list"></i> Token Stream</button>
+                        <button class="tab-btn" onclick="openTab('tab-ai', this)"><i class="fa-solid fa-robot"></i> AI Insights</button>
+                    </div>
+                
+                <div id="tab-diagnostics" class="tab-content active fade-in">
+                    <div id="diagnostics-box" class="info-box">No errors. Ready to compile.</div>
+                </div>
+                
+                <div id="tab-symbols" class="tab-content" style="display: none;">
+                    <div class="table-container">
+                        <table id="symbol-table">
+                            <thead><tr><th>Name</th><th>Type</th><th>Scope</th><th>Kind</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="tab-ast" class="tab-content" style="display: none;">
+                    <div style="display: flex; gap: 20px; height: 100%;">
+                        <div style="flex: 1; overflow: auto; border-right: 1px solid var(--border-color); padding-right: 15px;">
+                            <h4 style="margin-bottom: 10px; color: var(--text-secondary);">Abstract Syntax Tree</h4>
+                            <div id="ast-tree-container" class="code-box" style="background: transparent; padding: 0;"></div>
+                        </div>
+                        <div style="flex: 1; overflow: auto;">
+                            <h4 style="margin-bottom: 10px; color: var(--text-secondary);">Control Flow Graph (CFG)</h4>
+                            <div id="cfg-container" class="mermaid" style="background: white; border-radius: 8px; padding: 10px; min-height: 200px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-ir" class="tab-content" style="display: none;">
+                    <div style="display: flex; gap: 20px; height: 100%;">
+                        <div style="flex: 1; overflow: auto; border-right: 1px solid var(--border-color); padding-right: 15px;">
+                            <h4 style="margin-bottom: 10px; color: var(--text-secondary);">Three-Address Code (Raw)</h4>
+                            <pre id="tac-container" class="code-box" style="background: transparent; padding: 0;"></pre>
+                        </div>
+                        <div style="flex: 1; overflow: auto;">
+                            <h4 style="margin-bottom: 10px; color: var(--text-secondary);">Optimized IR (Constant Folded)</h4>
+                            <pre id="opt-container" class="code-box" style="background: transparent; padding: 0;"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-tokens" class="tab-content" style="display: none;">
+                    <div class="table-container">
+                        <table id="token-table">
+                            <thead><tr><th>Type</th><th>Value</th><th>Line</th><th>Column</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div id="tab-ai" class="tab-content" style="display: none;">
+                    <div id="ai-status" class="info-box">AI not used for this translation.</div>
+                    <pre id="ai-json" class="code-box"></pre>
+                </div>
+                </div> <!-- End inspector container -->
+            </div>
+            
+        </main>
+    </div>
+    
+    <script src="/static/script.js"></script>
+</body>
+</html>
