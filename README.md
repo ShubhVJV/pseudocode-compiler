@@ -1,4 +1,4 @@
-# Pseudocode to Java Code Generator
+# Pseudocode to python Code Generator
 
 An AI-powered tool that converts **human-readable pseudocode into valid Java code**.
 
