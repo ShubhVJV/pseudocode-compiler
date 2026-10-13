@@ -1,4 +1,5 @@
-from transpiler.lexer import Lexer
+import re
+from transpiler.lexer import Lexer, TAMIL_TANGLISH_KEYWORDS
 from transpiler.parser import Parser
 from transpiler.semantic import SemanticAnalyzer
 from transpiler.codegen import CodeGenerator
@@ -19,10 +20,43 @@ def ast_to_dict(node):
         return d
     return str(node)
 
+STRUCTURED_LINE_STARTERS = {
+    'START', 'STOP', 'SET', 'IF', 'ELSE', 'ELIF', 'ELSEIF', 'ENDIF', 'END',
+    'WHILE', 'ENDWHILE', 'FOR', 'ENDFOR', 'FUNCTION', 'DEF', 'DEFINE',
+    'PROCEDURE', 'PROC', 'ENDFUNCTION', 'ENDDEF', 'RETURN', 'BREAK', 'CONTINUE',
+    'LET', 'ASSIGN', 'DECLARE', 'IMPORT', 'PRINT', 'OUTPUT', 'READ', 'INPUT',
+    *TAMIL_TANGLISH_KEYWORDS.keys()
+}
+
 class TranspilerPipeline:
     def __init__(self):
         self.ai = AIModule()
-        
+
+    def _is_nlp_input(self, code):
+        """Return True only if the input looks like natural language prose rather than structured pseudocode."""
+        cleaned = re.sub(r'"[^"]*"|\'[^\']*\'', '', code).strip()
+        if not cleaned:
+            return False
+
+        # Structured operators or bracket syntax indicate code rather than plain English NLP
+        if re.search(r'[=<>!+\-*/%\[\]]', cleaned):
+            return False
+
+        lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip() and not ln.strip().startswith('#')]
+        if not lines:
+            return False
+
+        for ln in lines:
+            words = ln.split()
+            first_word = words[0].upper().rstrip(':')
+            if first_word in STRUCTURED_LINE_STARTERS:
+                return False
+            # Function call syntax like foo(bar) at start of line
+            if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*\s*\(', ln):
+                return False
+
+        return True
+
     def compile(self, code):
         result = {
             "tokens": [],
@@ -41,57 +75,51 @@ class TranspilerPipeline:
             "success": False
         }
         
-        # 1. Lexical Analysis
+        # 1. Lexical Analysis (never use AI to bypass lexical errors)
         lexer = Lexer(code)
         tokens, lex_errors = lexer.tokenize()
         result["tokens"] = [{"type": t.type, "value": t.value, "line": t.line, "col": t.column} for t in tokens]
         result["lex_errors"] = lex_errors
         
         if lex_errors:
-            self._attempt_ai_fix(code, result, lex_errors)
-            if not result["success"]:
-                return result
+            return result
             
-        if not result["success"]:
-            # 2. Parsing
-            parser = Parser(tokens)
-            ast, parse_errors = parser.parse()
-            result["parse_errors"] = parse_errors
-            
-            # If parsing fails on the first token, it might be a single natural language instruction
-            if parse_errors and len(code.split('\n')) == 1:
-                ai_ast = self.ai.interpret_natural_language(code)
-                if ai_ast:
+        # 2. Parsing
+        parser = Parser(tokens)
+        ast, parse_errors = parser.parse()
+        result["parse_errors"] = parse_errors
+        
+        # Only use AI if the input is natural language (NLP), NEVER for fixing structured code errors
+        if parse_errors and self._is_nlp_input(code):
+            ai_ast = self.ai.interpret_natural_language(code)
+            if ai_ast:
+                if hasattr(ai_ast, 'statements'):
+                    ast = ai_ast
+                else:
                     ast.statements = [ai_ast]
-                    result["parse_errors"] = [] # Cleared because AI handled it
-                    result["ai_used"] = self.ai.ai_used
-                    result["ai_reason"] = self.ai.ai_reason
-                    result["ai_structured"] = self.ai.structured_intent
+                result["parse_errors"] = []
+                result["ai_used"] = self.ai.ai_used
+                result["ai_reason"] = self.ai.ai_reason
+                result["ai_structured"] = self.ai.structured_intent
 
-            if result["parse_errors"]:
-                self._attempt_ai_fix(code, result, result["parse_errors"])
-                if not result["success"]:
-                    return result
-                
-        if not result["success"]:
-            # 3. Semantic Analysis
-            analyzer = SemanticAnalyzer()
-            semantic_errors = analyzer.analyze(ast)
-            result["semantic_errors"] = semantic_errors
+        if result["parse_errors"]:
+            return result
             
-            if semantic_errors:
-                self._attempt_ai_fix(code, result, semantic_errors)
-                if not result["success"]:
-                    return result
+        # 3. Semantic Analysis (never use AI to bypass semantic errors)
+        analyzer = SemanticAnalyzer()
+        semantic_errors = analyzer.analyze(ast)
+        result["semantic_errors"] = semantic_errors
+        
+        if semantic_errors:
+            return result
 
-        if not result["success"]:
-            # 4. Code Generation
-            codegen = CodeGenerator()
-            python_code = codegen.generate(ast)
-            result["python_code"] = python_code
-            result["success"] = True
+        # 4. Code Generation
+        codegen = CodeGenerator()
+        python_code = codegen.generate(ast)
+        result["python_code"] = python_code
+        result["success"] = True
             
-        # Ensure we always populate AST if it exists
+        # Populate AST, CFG, and IR
         if 'ast' in locals() and ast:
             result["ast_tree"] = ast_to_dict(ast)
             from transpiler.cfg_generator import generate_cfg
@@ -105,40 +133,7 @@ class TranspilerPipeline:
             optimizer = IROptimizer()
             result["optimized_ir"] = optimizer.optimize(raw_tac)
             
-        # Ensure we always populate symbols if analyzer ran
         if 'analyzer' in locals() and analyzer:
             result["symbol_table"] = analyzer.all_symbols
             
         return result
-
-    def _attempt_ai_fix(self, code, result, errors):
-        ai_ast = self.ai.fix_code_errors(code, errors)
-        if ai_ast:
-            codegen = CodeGenerator()
-            python_code = codegen.generate(ai_ast)
-            result["python_code"] = python_code
-            result["ast_tree"] = ast_to_dict(ai_ast)
-            
-            from transpiler.cfg_generator import generate_cfg
-            result["cfg_mermaid"] = generate_cfg(ai_ast)
-            
-            from transpiler.ir_generator import TACGenerator, IROptimizer
-            tac_gen = TACGenerator()
-            raw_tac = tac_gen.generate(ai_ast)
-            result["tac"] = raw_tac
-            
-            optimizer = IROptimizer()
-            result["optimized_ir"] = optimizer.optimize(raw_tac)
-            
-            analyzer = SemanticAnalyzer()
-            analyzer.analyze(ai_ast)
-            result["symbol_table"] = analyzer.all_symbols
-            
-            result["ai_used"] = True
-            result["ai_reason"] = "cant compile manually using ai to resolve the issues"
-            result["ai_structured"] = self.ai.structured_intent
-            result["success"] = True
-            # Clear manual errors so UI doesn't say it failed
-            result["lex_errors"] = []
-            result["parse_errors"] = []
-            result["semantic_errors"] = []

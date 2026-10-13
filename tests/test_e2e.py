@@ -9,6 +9,7 @@ IF a < b THEN
     PRINT a
 ELSE
     PRINT b
+ENDIF
 STOP"""
     pipeline = TranspilerPipeline()
     result = pipeline.compile(code)
@@ -39,7 +40,7 @@ MUDI"""
 
 def test_undeclared_variable():
     code = """START
-SET a = b + 5
+a = b + 5
 STOP"""
     pipeline = TranspilerPipeline()
     result = pipeline.compile(code)
@@ -71,7 +72,7 @@ def test_while_loop():
 DECLARE i = 0
 WHILE i < 5 DO
     PRINT i
-    SET i = i + 1
+    i = i + 1
 ENDWHILE
 STOP"""
     pipeline = TranspilerPipeline()

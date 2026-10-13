@@ -596,17 +596,14 @@ function switchMode(mode, element) {
         document.querySelector('.top-pane').style.flex = '2';
         document.querySelector('.top-pane').style.minHeight = '250px';
         
-        const langMap = {
-            'pseudocode': 'START\n\nSTOP',
-            'tamil': 'THODANGU\n\nMUDI'
-        };
         const titleMap = {
             'pseudocode': 'Pseudocode Input',
             'tamil': 'Tamil / Tanglish Input'
         };
-        document.getElementById('source-code').value = langMap[mode] || '';
+        document.getElementById('source-code').value = placeholders[mode] || '';
         document.getElementById('editor-title').innerText = titleMap[mode] || 'Input';
         updateLineNumbers(document.getElementById('source-code'), document.getElementById('editor-lines'));
+        resetPipeline();
     }
 }
 

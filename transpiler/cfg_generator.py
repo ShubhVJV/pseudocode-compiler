@@ -19,7 +19,7 @@ class CFGBuilder:
         t = type(node).__name__
         node_id = self.get_id()
         
-        if t in ['Assign', 'Declare']:
+        if t in ['Assign', 'Declare', 'TupleUnpackAssign']:
             self.lines.append(f'  {node_id}["{t}: {node.name}"]')
             for h in current_heads:
                 self.lines.append(f'  {h} --> {node_id}')
@@ -70,7 +70,7 @@ class CFGBuilder:
                 
             return [node_id] # Exit path
             
-        elif t == 'ForStmt':
+        elif t in ('ForStmt', 'ForEachStmt'):
             self.lines.append(f'  {node_id}{{"For Loop: {node.var}"}}')
             for h in current_heads:
                 self.lines.append(f'  {h} --> {node_id}')
@@ -92,7 +92,7 @@ class CFGBuilder:
                 self.lines.append(f'  {h} --> {node_id}')
             return []
             
-        elif t == 'FunctionCall':
+        elif t in ('FunctionCall', 'MethodCall'):
             self.lines.append(f'  {node_id}["Call: {node.name}"]')
             for h in current_heads:
                 self.lines.append(f'  {h} --> {node_id}')
