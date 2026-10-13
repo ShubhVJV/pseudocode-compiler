@@ -41,6 +41,9 @@ class TranspilerPipeline:
             "success": False
         }
         
+        ast = None
+        analyzer = None
+
         # 1. Lexical Analysis
         lexer = Lexer(code)
         tokens, lex_errors = lexer.tokenize()
@@ -51,63 +54,64 @@ class TranspilerPipeline:
             self._attempt_ai_fix(code, result, lex_errors)
             if not result["success"]:
                 return result
-            
-        if not result["success"]:
-            # 2. Parsing
-            parser = Parser(tokens)
-            ast, parse_errors = parser.parse()
-            result["parse_errors"] = parse_errors
-            
-            # If parsing fails on the first token, it might be a single natural language instruction
-            if parse_errors and len(code.split('\n')) == 1:
-                ai_ast = self.ai.interpret_natural_language(code)
-                if ai_ast:
-                    ast.statements = [ai_ast]
-                    result["parse_errors"] = [] # Cleared because AI handled it
-                    result["ai_used"] = self.ai.ai_used
-                    result["ai_reason"] = self.ai.ai_reason
-                    result["ai_structured"] = self.ai.structured_intent
+            # AI fixed it — ast populated inside _attempt_ai_fix result, skip normal pipeline
+            return result
 
-            if result["parse_errors"]:
-                self._attempt_ai_fix(code, result, result["parse_errors"])
-                if not result["success"]:
-                    return result
-                
-        if not result["success"]:
-            # 3. Semantic Analysis
-            analyzer = SemanticAnalyzer()
-            semantic_errors = analyzer.analyze(ast)
-            result["semantic_errors"] = semantic_errors
-            
-            if semantic_errors:
-                self._attempt_ai_fix(code, result, semantic_errors)
-                if not result["success"]:
-                    return result
+        # 2. Parsing
+        parser = Parser(tokens)
+        ast, parse_errors = parser.parse()
+        result["parse_errors"] = parse_errors
+        
+        # If parsing fails on a single line, it might be a natural language instruction
+        if parse_errors and len(code.strip().split('\n')) == 1:
+            ai_ast = self.ai.interpret_natural_language(code)
+            if ai_ast:
+                ast.statements = [ai_ast]
+                result["parse_errors"] = []
+                result["ai_used"] = self.ai.ai_used
+                result["ai_reason"] = self.ai.ai_reason
+                result["ai_structured"] = self.ai.structured_intent
 
-        if not result["success"]:
-            # 4. Code Generation
-            codegen = CodeGenerator()
-            python_code = codegen.generate(ast)
-            result["python_code"] = python_code
-            result["success"] = True
-            
-        # Ensure we always populate AST if it exists
-        if 'ast' in locals() and ast:
-            result["ast_tree"] = ast_to_dict(ast)
-            from transpiler.cfg_generator import generate_cfg
-            result["cfg_mermaid"] = generate_cfg(ast)
-            
-            from transpiler.ir_generator import TACGenerator, IROptimizer
-            tac_gen = TACGenerator()
-            raw_tac = tac_gen.generate(ast)
-            result["tac"] = raw_tac
-            
-            optimizer = IROptimizer()
-            result["optimized_ir"] = optimizer.optimize(raw_tac)
-            
-        # Ensure we always populate symbols if analyzer ran
-        if 'analyzer' in locals() and analyzer:
-            result["symbol_table"] = analyzer.all_symbols
+        if result["parse_errors"]:
+            self._attempt_ai_fix(code, result, result["parse_errors"])
+            if not result["success"]:
+                # Still populate AST/tokens for inspector even on failure
+                if ast:
+                    result["ast_tree"] = ast_to_dict(ast)
+                return result
+            return result
+
+        # 3. Semantic Analysis
+        analyzer = SemanticAnalyzer()
+        semantic_errors = analyzer.analyze(ast)
+        result["semantic_errors"] = semantic_errors
+        result["symbol_table"] = analyzer.all_symbols
+        
+        if semantic_errors:
+            self._attempt_ai_fix(code, result, semantic_errors)
+            if not result["success"]:
+                if ast:
+                    result["ast_tree"] = ast_to_dict(ast)
+                return result
+            return result
+
+        # 4. Code Generation
+        codegen = CodeGenerator()
+        python_code = codegen.generate(ast)
+        result["python_code"] = python_code
+        result["success"] = True
+
+        # Populate AST, CFG, TAC, IR
+        result["ast_tree"] = ast_to_dict(ast)
+        from transpiler.cfg_generator import generate_cfg
+        result["cfg_mermaid"] = generate_cfg(ast)
+        
+        from transpiler.ir_generator import TACGenerator, IROptimizer
+        tac_gen = TACGenerator()
+        raw_tac = tac_gen.generate(ast)
+        result["tac"] = raw_tac
+        optimizer = IROptimizer()
+        result["optimized_ir"] = optimizer.optimize(raw_tac)
             
         return result
 

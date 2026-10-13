@@ -259,8 +259,10 @@ function renderAST(node, key = null) {
 }
 
 // Line Numbers Logic
-function updateLineNumbers(textarea, lineNumbersEl) {
-    const linesCount = textarea.value.split('\n').length;
+function updateLineNumbers(el, lineNumbersEl) {
+    if (!el || !lineNumbersEl) return;
+    const text = (el.value !== undefined) ? el.value : (el.innerText || '');
+    const linesCount = text ? text.split('\n').length : 1;
     let linesHtml = '';
     for (let i = 1; i <= linesCount; i++) {
         linesHtml += i + '<br>';
@@ -414,7 +416,7 @@ function updatePipeline(data) {
     // 6. Code Gen
     if (data.success) {
         stepGen.classList.add('success');
-        dGen.innerText = `${data.python_code ? data.python_code.split('\\n').length : 0} lines`;
+        dGen.innerText = `${data.python_code ? data.python_code.split('\n').length : 0} lines`;
     } else {
         stepGen.classList.add('error');
         dGen.innerText = 'Failed';
@@ -537,23 +539,29 @@ function switchMode(mode, element) {
     document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
     if(element) element.classList.add('active');
     
+    const uploadPanel = document.getElementById('flowchart-upload-panel');
+    const flowchartPanel = document.getElementById('flowchart-panel');
+    const editorPanel = document.getElementById('editor-panel');
+    const outputPanel = document.getElementById('output-panel');
+    const gutterV = document.getElementById('gutter-v');
+    const gutterH = document.getElementById('gutter-h');
+    const insp = document.getElementById('bottom-pane');
+    const pipe = document.getElementById('pipeline-container');
+    const topPane = document.querySelector('.top-pane');
+
     if (mode === 'flowchart') {
         flowchartPanelsVisible = false;
-        document.getElementById('editor-panel').style.display = 'none';
-        document.getElementById('output-panel').style.display = 'none';
-        document.getElementById('gutter-v').style.display = 'none';
-        document.getElementById('gutter-h').style.display = 'none';
-        
-        const insp = document.getElementById('bottom-pane');
+        editorPanel.style.display = 'none';
+        outputPanel.style.display = 'none';
+        if (uploadPanel) uploadPanel.style.display = 'none';
+        gutterV.style.display = 'none';
+        gutterH.style.display = 'none';
         if (insp) insp.style.display = 'none';
-        
-        const pipe = document.getElementById('pipeline-container');
         if (pipe) pipe.style.display = 'none';
         
-        document.getElementById('flowchart-panel').style.display = 'flex';
-        // Make the top pane take the entire height
-        document.querySelector('.top-pane').style.flex = '1';
-        document.querySelector('.top-pane').style.minHeight = '100%';
+        flowchartPanel.style.display = 'flex';
+        topPane.style.flex = '1';
+        topPane.style.minHeight = '100%';
         
         // Init drawflow on first open
         if (!editorFlow) {
@@ -561,7 +569,6 @@ function switchMode(mode, element) {
             editorFlow = new Drawflow(id);
             editorFlow.start();
             editorFlow.reroute = true;
-            
             
             // Build default flowchart: Maximum of two numbers
             const nStart = spawnNode('start', 50, 150);
@@ -580,21 +587,32 @@ function switchMode(mode, element) {
             editorFlow.addConnection(nOutA, nEnd, 'output_1', 'input_1');
             editorFlow.addConnection(nOutB, nEnd, 'output_1', 'input_1');
         }
+    } else if (mode === 'flowchart-upload') {
+        flowchartPanelsVisible = false;
+        editorPanel.style.display = 'none';
+        outputPanel.style.display = 'none';
+        flowchartPanel.style.display = 'none';
+        gutterV.style.display = 'none';
+        gutterH.style.display = 'none';
+        if (insp) insp.style.display = 'none';
+        if (pipe) pipe.style.display = 'none';
+        
+        if (uploadPanel) uploadPanel.style.display = 'flex';
+        topPane.style.flex = '1';
+        topPane.style.minHeight = '100%';
     } else {
-        document.getElementById('flowchart-panel').style.display = 'none';
-        document.getElementById('editor-panel').style.display = 'flex';
-        document.getElementById('output-panel').style.display = 'flex';
-        document.getElementById('gutter-v').style.display = 'block';
-        document.getElementById('gutter-h').style.display = 'block';
+        if (uploadPanel) uploadPanel.style.display = 'none';
+        flowchartPanel.style.display = 'none';
+        editorPanel.style.display = 'flex';
+        outputPanel.style.display = 'flex';
+        gutterV.style.display = 'block';
+        gutterH.style.display = 'block';
         
-        const insp = document.getElementById('bottom-pane');
         if (insp) insp.style.display = 'flex';
-        
-        const pipe = document.getElementById('pipeline-container');
         if (pipe) pipe.style.display = 'block';
         
-        document.querySelector('.top-pane').style.flex = '2';
-        document.querySelector('.top-pane').style.minHeight = '250px';
+        topPane.style.flex = '2';
+        topPane.style.minHeight = '250px';
         
         const langMap = {
             'pseudocode': 'START\n\nSTOP',
@@ -703,4 +721,336 @@ function toggleFlowchartPanels() {
         const pipe = document.getElementById('pipeline-container');
         if (pipe) pipe.style.display = 'none';
     }
+}
+
+// --- Flowchart Upload Logic ---
+const flowchartFileInput = document.getElementById('flowchart-file-input');
+const uploadDropzone = document.getElementById('upload-dropzone');
+const dropzonePrompt = document.getElementById('dropzone-prompt');
+const uploadPreviewArea = document.getElementById('upload-preview-area');
+const previewImage = document.getElementById('preview-image');
+const previewFilename = document.getElementById('preview-filename');
+const previewFilesize = document.getElementById('preview-filesize');
+const btnRemovePreview = document.getElementById('btn-remove-preview');
+const btnProcessUpload = document.getElementById('btn-process-upload');
+const uploadStatusBox = document.getElementById('upload-status-box');
+
+let activeFlowchartFile = null;
+
+function displayUploadedImage(src, name, sizeFormatted) {
+    if (previewImage) previewImage.src = src;
+    if (previewFilename) previewFilename.innerText = name;
+    if (previewFilesize) previewFilesize.innerText = sizeFormatted;
+    if (dropzonePrompt) dropzonePrompt.style.display = 'none';
+    if (uploadPreviewArea) uploadPreviewArea.style.display = 'flex';
+    if (uploadStatusBox) {
+        uploadStatusBox.style.display = 'none';
+        uploadStatusBox.className = 'info-box';
+    }
+}
+
+function resetUploadPreview() {
+    activeFlowchartFile = null;
+    if (flowchartFileInput) flowchartFileInput.value = '';
+    if (previewImage) previewImage.src = '';
+    if (dropzonePrompt) dropzonePrompt.style.display = 'flex';
+    if (uploadPreviewArea) uploadPreviewArea.style.display = 'none';
+    if (uploadStatusBox) uploadStatusBox.style.display = 'none';
+}
+
+if (flowchartFileInput) {
+    flowchartFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        activeFlowchartFile = file;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+            displayUploadedImage(evt.target.result, file.name, sizeStr);
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+if (uploadDropzone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        uploadDropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            uploadDropzone.classList.add('dragover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        uploadDropzone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            uploadDropzone.classList.remove('dragover');
+        }, false);
+    });
+
+    uploadDropzone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+            const file = files[0];
+            activeFlowchartFile = file;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+                displayUploadedImage(evt.target.result, file.name, sizeStr);
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+}
+
+if (btnRemovePreview) {
+    btnRemovePreview.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetUploadPreview();
+    });
+}
+
+if (btnProcessUpload) {
+    btnProcessUpload.addEventListener('click', async () => {
+        if (!uploadStatusBox) return;
+        if (!previewImage || !previewImage.src || previewImage.src === '') {
+            uploadStatusBox.className = 'info-box warning';
+            uploadStatusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Please upload a flowchart image or select a sample diagram first.';
+            uploadStatusBox.style.display = 'block';
+            return;
+        }
+
+        const engine = document.getElementById('vision-model-select') ? document.getElementById('vision-model-select').value : 'shape-ocr';
+        const target = document.getElementById('output-target-select') ? document.getElementById('output-target-select').value : 'pseudocode';
+        const origBtnText = btnProcessUpload.innerHTML;
+
+        btnProcessUpload.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Extracting & Transpiling...';
+        btnProcessUpload.disabled = true;
+        uploadStatusBox.className = 'info-box';
+        uploadStatusBox.innerHTML = '<i class="fa-solid fa-microscope"></i> Analyzing diagram geometry and extracting pseudocode...';
+        uploadStatusBox.style.display = 'block';
+
+        try {
+            const res = await fetch('/upload_flowchart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image: previewImage.src,
+                    filename: previewFilename ? previewFilename.innerText : '',
+                    engine: engine,
+                    target: target
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.generated_pseudo) {
+                // Populate main editor
+                editor.value = data.generated_pseudo;
+                updateLineNumbers(editor, editorLines);
+
+                // Populate Python output
+                const pythonOutput = document.getElementById('python-output');
+                const pythonLines = document.getElementById('python-lines');
+                if (pythonOutput) pythonOutput.innerText = data.python_code || 'No code generated';
+                if (pythonLines && pythonOutput) updateLineNumbers({value: pythonOutput.innerText}, pythonLines);
+
+                // Update pipeline visualizer & diagnostics
+                updatePipeline(data);
+
+                // Populate Tokens
+                const tokenTbody = document.querySelector('#token-table tbody');
+                if (tokenTbody && data.tokens) {
+                    tokenTbody.innerHTML = '';
+                    data.tokens.forEach(t => {
+                        tokenTbody.innerHTML += `<tr><td><span class="badge" style="background:var(--border-color)">${t.type}</span></td><td>${t.value}</td><td>${t.line}</td><td>${t.col}</td></tr>`;
+                    });
+                }
+
+                // Populate Symbol Table
+                const symbolTbody = document.querySelector('#symbol-table tbody');
+                if (symbolTbody && data.symbol_table) {
+                    symbolTbody.innerHTML = '';
+                    data.symbol_table.forEach(s => {
+                        symbolTbody.innerHTML += `<tr>
+                            <td><strong>${s.name}</strong></td>
+                            <td style="color:var(--accent-green)">${s.type}</td>
+                            <td>${s.scope}</td>
+                            <td><span class="badge" style="background:var(--border-color)">${s.kind}</span></td>
+                        </tr>`;
+                    });
+                }
+
+                // Populate AST & CFG
+                const astContainer = document.getElementById('ast-tree-container');
+                if (astContainer) {
+                    astContainer.innerHTML = data.ast_tree ? `<div class="ast-node">${renderAST(data.ast_tree)}</div>` : 'No AST generated.';
+                }
+
+                // Enable execution button
+                const btnExecute = document.getElementById('btn-execute');
+                if (btnExecute && data.python_code) {
+                    btnExecute.disabled = false;
+                }
+
+                const modeToOpen = target === 'tamil' ? 'tamil' : 'pseudocode';
+                uploadStatusBox.className = 'info-box success';
+                uploadStatusBox.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> <strong>Extraction Complete!</strong> Flowchart parsed into <code>${target}</code>.</div>
+                        <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.82rem; max-height: 100px; overflow-y: auto;">
+                            ${data.generated_pseudo.replace(/\n/g, '<br>')}
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <button type="button" class="btn secondary-btn btn-sm" onclick="switchMode('${modeToOpen}', document.querySelector('.nav-links li[data-mode=${modeToOpen}]'))">
+                                <i class="fa-solid fa-laptop-code"></i> Open Code & Output View
+                            </button>
+                            <button type="button" class="btn primary-btn btn-sm" onclick="document.getElementById('btn-execute').click()">
+                                <i class="fa-solid fa-play"></i> Execute Now
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else if (data.error) {
+                uploadStatusBox.className = 'info-box error';
+                uploadStatusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <strong>Backend Error:</strong> ${data.error}`;
+            } else {
+                uploadStatusBox.className = 'info-box warning';
+                uploadStatusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Could not extract valid statements from flowchart. Try a different image or engine.';
+            }
+        } catch (err) {
+            uploadStatusBox.className = 'info-box error';
+            uploadStatusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Failed to process flowchart: ${err.message}`;
+        } finally {
+            btnProcessUpload.innerHTML = origBtnText;
+            btnProcessUpload.disabled = false;
+        }
+    });
+}
+
+// Sample Flowcharts (SVG generation)
+function loadSampleFlowchart(sampleKey) {
+    let svgContent = '';
+    let fileName = '';
+
+    if (sampleKey === 'max_two') {
+        fileName = 'max_of_two_numbers.svg';
+        svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" width="100%" height="100%">
+            <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#00ff00" />
+                </marker>
+            </defs>
+            <rect width="360" height="480" fill="#0b0f19" rx="10"/>
+            <!-- Start -->
+            <rect x="120" y="25" width="120" height="40" rx="20" fill="#22c55e"/>
+            <text x="180" y="50" fill="#000" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">START</text>
+            <line x1="180" y1="65" x2="180" y2="105" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow)"/>
+            <!-- Input -->
+            <polygon points="110,145 250,145 230,110 90,110" fill="#3b82f6"/>
+            <text x="170" y="132" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="13" text-anchor="middle">INPUT A, B</text>
+            <line x1="170" y1="145" x2="170" y2="185" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow)"/>
+            <!-- Decision -->
+            <polygon points="170,190 240,230 170,270 100,230" fill="#f59e0b"/>
+            <text x="170" y="235" fill="#000" font-family="sans-serif" font-weight="bold" font-size="13" text-anchor="middle">A &gt; B ?</text>
+            <!-- Branch True -->
+            <line x1="240" y1="230" x2="280" y2="230" stroke="#00ff00" stroke-width="2"/>
+            <line x1="280" y1="230" x2="280" y2="295" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow)"/>
+            <text x="255" y="222" fill="#00ff00" font-size="11" font-family="sans-serif">True</text>
+            <polygon points="230,335 330,335 315,300 215,300" fill="#3b82f6"/>
+            <text x="272" y="322" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">PRINT A</text>
+            <!-- Branch False -->
+            <line x1="100" y1="230" x2="60" y2="230" stroke="#00ff00" stroke-width="2"/>
+            <line x1="60" y1="230" x2="60" y2="295" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow)"/>
+            <text x="65" y="222" fill="#ff4444" font-size="11" font-family="sans-serif">False</text>
+            <polygon points="20,335 120,335 105,300 5,300" fill="#3b82f6"/>
+            <text x="62" y="322" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">PRINT B</text>
+            <!-- Merge to End -->
+            <line x1="272" y1="335" x2="272" y2="390" stroke="#00ff00" stroke-width="2"/>
+            <line x1="62" y1="335" x2="62" y2="390" stroke="#00ff00" stroke-width="2"/>
+            <line x1="62" y1="390" x2="180" y2="390" stroke="#00ff00" stroke-width="2"/>
+            <line x1="272" y1="390" x2="180" y2="390" stroke="#00ff00" stroke-width="2"/>
+            <line x1="180" y1="390" x2="180" y2="415" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow)"/>
+            <!-- End -->
+            <rect x="120" y="420" width="120" height="40" rx="20" fill="#ef4444"/>
+            <text x="180" y="445" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="14" text-anchor="middle">END</text>
+        </svg>`;
+    } else if (sampleKey === 'factorial') {
+        fileName = 'factorial_calculator.svg';
+        svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 480" width="100%" height="100%">
+            <defs>
+                <marker id="arrow2" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#00ff00" />
+                </marker>
+            </defs>
+            <rect width="360" height="480" fill="#0b0f19" rx="10"/>
+            <rect x="120" y="20" width="120" height="36" rx="18" fill="#22c55e"/>
+            <text x="180" y="44" fill="#000" font-family="sans-serif" font-weight="bold" font-size="13" text-anchor="middle">START</text>
+            <line x1="180" y1="56" x2="180" y2="85" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <polygon points="110,120 250,120 230,90 90,90" fill="#3b82f6"/>
+            <text x="170" y="108" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">INPUT N</text>
+            <line x1="170" y1="120" x2="170" y2="150" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <rect x="100" y="155" width="140" height="35" rx="5" fill="#a855f7"/>
+            <text x="170" y="177" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">FACT = 1, I = 1</text>
+            <line x1="170" y1="190" x2="170" y2="225" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <polygon points="170,230 235,265 170,300 105,265" fill="#f59e0b"/>
+            <text x="170" y="270" fill="#000" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">I &lt;= N ?</text>
+            <!-- Loop -->
+            <line x1="235" y1="265" x2="290" y2="265" stroke="#00ff00" stroke-width="2"/>
+            <line x1="290" y1="265" x2="290" y2="340" stroke="#00ff00" stroke-width="2"/>
+            <line x1="290" y1="340" x2="245" y2="340" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <rect x="95" y="325" width="150" height="35" rx="5" fill="#a855f7"/>
+            <text x="170" y="347" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="11" text-anchor="middle">FACT = FACT*I, I = I+1</text>
+            <line x1="95" y1="342" x2="50" y2="342" stroke="#00ff00" stroke-width="2"/>
+            <line x1="50" y1="342" x2="50" y2="210" stroke="#00ff00" stroke-width="2"/>
+            <line x1="50" y1="210" x2="170" y2="210" stroke="#00ff00" stroke-width="2"/>
+            <line x1="170" y1="210" x2="170" y2="225" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <!-- Exit Loop -->
+            <line x1="170" y1="300" x2="170" y2="385" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <polygon points="100,420 240,420 220,390 80,390" fill="#3b82f6"/>
+            <text x="160" y="408" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">PRINT FACT</text>
+            <line x1="160" y1="420" x2="160" y2="445" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow2)"/>
+            <rect x="110" y="445" width="100" height="30" rx="15" fill="#ef4444"/>
+            <text x="160" y="465" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">END</text>
+        </svg>`;
+    } else {
+        fileName = 'odd_even_checker.svg';
+        svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 440" width="100%" height="100%">
+            <defs>
+                <marker id="arrow3" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#00ff00" />
+                </marker>
+            </defs>
+            <rect width="360" height="440" fill="#0b0f19" rx="10"/>
+            <rect x="120" y="20" width="120" height="36" rx="18" fill="#22c55e"/>
+            <text x="180" y="44" fill="#000" font-family="sans-serif" font-weight="bold" font-size="13" text-anchor="middle">START</text>
+            <line x1="180" y1="56" x2="180" y2="90" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow3)"/>
+            <polygon points="110,125 250,125 230,95 90,95" fill="#3b82f6"/>
+            <text x="170" y="113" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">INPUT NUM</text>
+            <line x1="170" y1="125" x2="170" y2="165" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow3)"/>
+            <polygon points="170,170 240,210 170,250 100,210" fill="#f59e0b"/>
+            <text x="170" y="215" fill="#000" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">NUM % 2 == 0?</text>
+            <line x1="240" y1="210" x2="280" y2="210" stroke="#00ff00" stroke-width="2"/>
+            <line x1="280" y1="210" x2="280" y2="275" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow3)"/>
+            <polygon points="220,315 330,315 315,280 205,280" fill="#3b82f6"/>
+            <text x="268" y="302" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">PRINT "Even"</text>
+            <line x1="100" y1="210" x2="60" y2="210" stroke="#00ff00" stroke-width="2"/>
+            <line x1="60" y1="210" x2="60" y2="275" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow3)"/>
+            <polygon points="15,315 125,315 110,280 0,280" fill="#3b82f6"/>
+            <text x="63" y="302" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="12" text-anchor="middle">PRINT "Odd"</text>
+            <line x1="268" y1="315" x2="268" y2="365" stroke="#00ff00" stroke-width="2"/>
+            <line x1="63" y1="315" x2="63" y2="365" stroke="#00ff00" stroke-width="2"/>
+            <line x1="63" y1="365" x2="170" y2="365" stroke="#00ff00" stroke-width="2"/>
+            <line x1="268" y1="365" x2="170" y2="365" stroke="#00ff00" stroke-width="2"/>
+            <line x1="170" y1="365" x2="170" y2="390" stroke="#00ff00" stroke-width="2" marker-end="url(#arrow3)"/>
+            <rect x="110" y="390" width="120" height="36" rx="18" fill="#ef4444"/>
+            <text x="170" y="414" fill="#fff" font-family="sans-serif" font-weight="bold" font-size="13" text-anchor="middle">END</text>
+        </svg>`;
+    }
+
+    const encodedSvg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgContent);
+    activeFlowchartFile = { name: fileName, size: 2840 };
+    displayUploadedImage(encodedSvg, fileName, '2.8 KB (Sample)');
 }

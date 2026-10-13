@@ -1,0 +1,15 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true,
+  "code-runner.executorMap": {
+    "python": "${workspaceFolder}/.venv/Scripts/python.exe -u"
+  },
+  "code-runner.clearPreviousOutput": true,
+  "code-runner.showExecutionMessage": true,
+  "code-runner.saveFileBeforeRun": true
+}
