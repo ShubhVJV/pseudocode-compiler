@@ -66,6 +66,23 @@ def test_natural_language_rule_based():
     assert not result["ai_used"]
     assert "sum = (5 + 6)" in result["python_code"]
 
+@pytest.mark.parametrize("code", [
+    "5 மற்றும் 6 ஐ கூட்டி காண்பி",
+    "5 மற்றும் 6 கூட்டி காட்டு",
+    "5 மற்றும் 6 ஐ கூட்டவும் எழுது",
+])
+def test_tamil_natural_language_addition_displays_sum(code, capsys):
+    result = TranspilerPipeline().compile(code)
+
+    assert result["success"]
+    assert not result["ai_used"]
+    assert not result["parse_errors"]
+    assert "sum = (5 + 6)" in result["python_code"]
+    assert "print(sum)" in result["python_code"]
+
+    exec(result["python_code"], {})
+    assert capsys.readouterr().out == "11\n"
+
 def test_while_loop():
     code = """START
 DECLARE i = 0

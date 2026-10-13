@@ -4,6 +4,7 @@ from transpiler.semantic import SemanticAnalyzer
 from transpiler.codegen import CodeGenerator
 from transpiler.ai_module import AIModule
 from transpiler.execution import ExecutionModule
+from transpiler.ast_nodes import Program
 
 def ast_to_dict(node):
     if node is None:
@@ -66,7 +67,7 @@ class TranspilerPipeline:
         if parse_errors and len(code.strip().split('\n')) == 1:
             ai_ast = self.ai.interpret_natural_language(code)
             if ai_ast:
-                ast.statements = [ai_ast]
+                ast.statements = ai_ast.statements if isinstance(ai_ast, Program) else [ai_ast]
                 result["parse_errors"] = []
                 result["ai_used"] = self.ai.ai_used
                 result["ai_reason"] = self.ai.ai_reason

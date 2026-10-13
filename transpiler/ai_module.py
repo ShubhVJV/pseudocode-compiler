@@ -34,6 +34,19 @@ class AIModule:
 
     def rule_based_fallback(self, text):
         text_lower = text.lower().strip()
+
+        tamil_addition = re.fullmatch(
+            r'\s*(\d+)\s+மற்றும்\s+(\d+)(?:\s+ஐ)?\s+'
+            r'(?:கூட்ட(?:ி|வும்|ு)|சேர்த்து|சேர்)\s+'
+            r'(?:காண்பி|காட்டு|எழுது)\s*[.!?]?\s*',
+            text_lower,
+        )
+        if tamil_addition:
+            left, right = tamil_addition.groups()
+            return Program([
+                Declare("sum", BinaryOp(self._make_operand(left), 'PLUS', self._make_operand(right))),
+                Print([Identifier("sum")]),
+            ])
         
         # Addition
         match = re.match(r'(add|calculate sum of|sum|find sum of)\s+([a-z0-9_]+)\s*(?:and|,|)\s*([a-z0-9_]+)', text_lower)
