@@ -80,6 +80,9 @@ class Parser:
                 return self.parse_set_implicit()
             elif next_tok and next_tok.type == 'LPAREN':
                 return self.parse_function_call_stmt()
+        elif tok.type in ('COMMA', 'SEMICOLON'):
+            self.advance()
+            return self.parse_statement()
                 
         # If we reach here, it's something we don't recognize as a statement
         self.errors.append(f"Syntax Error at line {tok.line}: Unrecognized statement starting with {tok.type}")

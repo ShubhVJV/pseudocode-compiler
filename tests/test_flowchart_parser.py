@@ -70,4 +70,6 @@ def test_factorial_svg():
     </svg>"""
     res = parse_flowchart_payload(sample_svg, target='pseudocode')
     assert "START" in res['generated_pseudo']
-    assert res['generated_pseudo'] is not None
+    assert "WHILE" in res['generated_pseudo']
+    assert res['success'] is True
+    assert "while" in res['python_code']

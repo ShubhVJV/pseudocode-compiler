@@ -90,39 +90,63 @@
 
                 <!-- Flowchart Upload Panel (Hidden by default) -->
                 <div class="panel flowchart-upload-panel" id="flowchart-upload-panel" style="display: none; flex: 1;">
-                    <div class="panel-header" style="justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <h3 style="margin: 0;"><i class="fa-solid fa-cloud-arrow-up"></i> Flowchart Upload</h3>
-                            <span style="font-size: 0.8rem; color: var(--text-secondary);">Upload diagram image or hand-drawn flowchart</span>
+                    <div class="panel-header upload-header-bar">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="upload-header-icon">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.05rem;"><i class="fa-solid fa-diagram-project"></i> Flowchart Transpiler Studio</h3>
+                                <span style="font-size: 0.8rem; color: var(--text-secondary);">Convert flowchart diagrams into clean pseudocode, transpiled Python, and run instantly</span>
+                            </div>
                         </div>
-                        <div class="badge" style="background: rgba(0, 255, 0, 0.15); color: var(--accent-green); border: 1px solid var(--accent-green); padding: 5px 12px; border-radius: 20px; font-size: 0.8rem;">
-                            <i class="fa-solid fa-shapes"></i> Offline Diagram Parser
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span id="upload-status-pill" class="badge upload-badge-ready">
+                                <i class="fa-solid fa-circle-check"></i> Ready
+                            </span>
                         </div>
                     </div>
                     
-                    <div class="upload-container">
-                        <!-- Main Dropzone Column -->
-                        <div class="upload-dropzone-col">
+                    <div class="upload-studio-container">
+                        <!-- Left Pane: Diagram Source & Configuration -->
+                        <div class="upload-studio-left">
+                            
+                            <!-- Dropzone & Diagram Viewport -->
                             <div class="upload-dropzone" id="upload-dropzone">
                                 <input type="file" id="flowchart-file-input" accept="image/png, image/jpeg, image/webp, image/svg+xml" style="display: none;">
                                 
+                                <!-- Empty Dropzone Prompt -->
                                 <div class="dropzone-content" id="dropzone-prompt">
                                     <div class="upload-icon-circle">
                                         <i class="fa-solid fa-cloud-arrow-up"></i>
                                     </div>
-                                    <h3 class="upload-title">Drag & drop your flowchart image here</h3>
-                                    <p class="upload-desc">Upload PNG, JPG, WEBP, or SVG diagrams to generate executable pseudocode and Python</p>
-                                    <button type="button" class="btn secondary-btn upload-browse-btn" onclick="document.getElementById('flowchart-file-input').click()">
+                                    <h3 class="upload-title">Drop your flowchart diagram here</h3>
+                                    <p class="upload-desc">Upload PNG, JPG, WEBP, or SVG flowcharts to generate executable code</p>
+                                    <button type="button" class="btn primary-btn upload-browse-btn" onclick="document.getElementById('flowchart-file-input').click()">
                                         <i class="fa-solid fa-folder-open"></i> Browse Files
                                     </button>
-                                    <span class="upload-hint">Supports high-res digital diagrams and clean hand-drawn sketches</span>
+                                    <span class="upload-hint">Supports high-res diagrams and clean hand-drawn sketches</span>
+                                    
+                                    <div class="dropzone-samples-divider">
+                                        <span>or test with sample diagrams</span>
+                                    </div>
+                                    
+                                    <div class="dropzone-samples-pills">
+                                        <button type="button" class="sample-pill-btn" onclick="loadSampleFlowchart('max_two')">
+                                            <i class="fa-solid fa-code-compare"></i> Max of Two
+                                        </button>
+                                        <button type="button" class="sample-pill-btn" onclick="loadSampleFlowchart('factorial')">
+                                            <i class="fa-solid fa-repeat"></i> Factorial
+                                        </button>
+                                        <button type="button" class="sample-pill-btn" onclick="loadSampleFlowchart('odd_even')">
+                                            <i class="fa-solid fa-scale-balanced"></i> Odd / Even
+                                        </button>
+                                    </div>
                                 </div>
                                 
+                                <!-- Diagram Preview Area -->
                                 <div class="upload-preview-area" id="upload-preview-area" style="display: none;">
-                                    <div class="preview-img-wrapper">
-                                        <img id="preview-image" src="" alt="Flowchart Preview">
-                                    </div>
-                                    <div class="preview-meta-bar">
+                                    <div class="preview-toolbar">
                                         <div class="preview-file-details">
                                             <i class="fa-solid fa-file-image file-icon"></i>
                                             <div>
@@ -131,72 +155,113 @@
                                             </div>
                                         </div>
                                         <div class="preview-actions">
-                                            <button type="button" class="btn secondary-btn btn-sm" id="btn-remove-preview">
-                                                <i class="fa-solid fa-trash"></i> Remove
+                                            <button type="button" class="btn secondary-btn btn-sm" id="btn-zoom-fit" title="Toggle zoom / fit">
+                                                <i class="fa-solid fa-expand"></i> Fit
                                             </button>
-                                            <button type="button" class="btn secondary-btn btn-sm" onclick="document.getElementById('flowchart-file-input').click()">
+                                            <button type="button" class="btn secondary-btn btn-sm" onclick="document.getElementById('flowchart-file-input').click()" title="Choose another diagram">
                                                 <i class="fa-solid fa-arrow-rotate-right"></i> Replace
+                                            </button>
+                                            <button type="button" class="btn secondary-btn btn-sm" id="btn-remove-preview" title="Remove image">
+                                                <i class="fa-solid fa-trash"></i> Remove
                                             </button>
                                         </div>
                                     </div>
+                                    
+                                    <div class="preview-img-wrapper" id="preview-img-wrapper">
+                                        <img id="preview-image" src="" alt="Flowchart Preview">
+                                    </div>
+                                    
+                                    <div class="preview-sample-strip">
+                                        <span class="strip-label">Quick Samples:</span>
+                                        <button type="button" class="sample-tag-btn" onclick="loadSampleFlowchart('max_two')">Max of Two</button>
+                                        <button type="button" class="sample-tag-btn" onclick="loadSampleFlowchart('factorial')">Factorial</button>
+                                        <button type="button" class="sample-tag-btn" onclick="loadSampleFlowchart('odd_even')">Odd / Even</button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Sidebar / Options Column -->
-                        <div class="upload-options-col">
-                            <div class="upload-card">
-                                <div class="upload-card-header">
-                                    <h4><i class="fa-solid fa-sliders"></i> Extraction Settings</h4>
-                                </div>
-                                <div class="upload-card-body">
-                                    <div class="option-field">
-                                        <label for="vision-model-select">Recognition Engine</label>
+                            
+                            <!-- Extraction Configuration Card -->
+                            <div class="upload-config-card">
+                                <div class="config-grid">
+                                    <div class="config-field">
+                                        <label for="vision-model-select">
+                                            <i class="fa-solid fa-sliders"></i> Recognition Engine
+                                        </label>
                                         <select class="custom-select" id="vision-model-select">
                                             <option value="shape-ocr" selected>Heuristic Contour & Shape Parser (Local)</option>
                                             <option value="handwritten">Handwritten Diagram OCR (Local)</option>
                                         </select>
                                     </div>
                                     
-                                    <div class="option-field">
-                                        <label for="output-target-select">Target Conversion</label>
+                                    <div class="config-field">
+                                        <label for="output-target-select">
+                                            <i class="fa-solid fa-bullseye"></i> Target Conversion
+                                        </label>
                                         <select class="custom-select" id="output-target-select">
-                                            <option value="pseudocode">Pseudocode + Python</option>
+                                            <option value="pseudocode" selected>Pseudocode + Python</option>
                                             <option value="tamil">Tamil / Tanglish + Python</option>
                                             <option value="drawflow">Import to Flowchart Builder</option>
                                         </select>
                                     </div>
-
-                                    <button type="button" class="btn primary-btn upload-action-btn" id="btn-process-upload">
-                                        <i class="fa-solid fa-wand-magic-sparkles"></i> Extract & Transpile
+                                </div>
+                                
+                                <button type="button" class="btn primary-btn upload-action-btn" id="btn-process-upload">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Extract & Transpile Flowchart
+                                </button>
+                                
+                                <div id="upload-status-box" class="info-box" style="display: none; margin-top: 10px; font-size: 0.85rem;"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Right Pane: Extracted Code & Execution Studio -->
+                        <div class="upload-studio-right">
+                            
+                            <!-- Studio Code Header -->
+                            <div class="studio-code-header">
+                                <div class="studio-tabs">
+                                    <button type="button" class="studio-tab-btn active" id="tab-btn-extracted-pseudo" onclick="switchUploadTab('pseudocode')">
+                                        <i class="fa-solid fa-code"></i> <span id="extracted-code-tab-label">Extracted Pseudocode</span>
                                     </button>
-
-                                    <div id="upload-status-box" class="info-box" style="display: none; margin-top: 12px; font-size: 0.85rem;"></div>
+                                    <button type="button" class="studio-tab-btn" id="tab-btn-extracted-python" onclick="switchUploadTab('python')">
+                                        <i class="fa-brands fa-python"></i> Transpiled Python
+                                    </button>
+                                </div>
+                                
+                                <div class="studio-actions">
+                                    <button type="button" class="btn secondary-btn btn-sm" id="btn-copy-extracted-code" title="Copy code to clipboard">
+                                        <i class="fa-solid fa-copy"></i> Copy
+                                    </button>
+                                    <button type="button" class="btn primary-btn btn-sm" id="btn-open-in-editor" title="Open this pseudocode in the Pseudocode editor to compile and run it">
+                                        <i class="fa-solid fa-play"></i> Run in Editor
+                                    </button>
                                 </div>
                             </div>
-
-                            <div class="upload-card">
-                                <div class="upload-card-header">
-                                    <h4><i class="fa-solid fa-lightbulb"></i> Try Sample Flowcharts</h4>
-                                </div>
-                                <div class="upload-card-body">
-                                    <p class="sample-hint">Click a sample to load and test the upload interface:</p>
-                                    <div class="samples-list">
-                                        <button type="button" class="sample-btn" onclick="loadSampleFlowchart('max_two')">
-                                            <i class="fa-solid fa-code-compare"></i>
-                                            <span>Max of Two Numbers</span>
-                                        </button>
-                                        <button type="button" class="sample-btn" onclick="loadSampleFlowchart('factorial')">
-                                            <i class="fa-solid fa-repeat"></i>
-                                            <span>Factorial Calculator</span>
-                                        </button>
-                                        <button type="button" class="sample-btn" onclick="loadSampleFlowchart('odd_even')">
-                                            <i class="fa-solid fa-scale-balanced"></i>
-                                            <span>Odd / Even Checker</span>
-                                        </button>
+                            
+                            <!-- Studio Code Views -->
+                            <div class="studio-code-views">
+                                <!-- Empty state before extraction -->
+                                <div class="studio-empty-state" id="studio-empty-state">
+                                    <div class="empty-icon-wrap">
+                                        <i class="fa-solid fa-code"></i>
                                     </div>
+                                    <h4>No Extracted Code Yet</h4>
+                                    <p>Upload a flowchart image or select a sample on the left, then click <strong>Extract & Transpile Flowchart</strong>.<br>The full extracted pseudocode and generated Python will appear here in high-legibility view.</p>
+                                </div>
+                                
+                                <!-- Extracted Pseudocode Editor (Spacious with line numbers) -->
+                                <div class="studio-editor-wrapper" id="studio-pseudo-view" style="display: none;">
+                                    <div class="line-numbers" id="upload-code-lines">1</div>
+                                    <textarea id="upload-code-output" class="code-box has-lines studio-textarea" spellcheck="false" placeholder="Extracted pseudocode will appear here..."></textarea>
+                                </div>
+                                
+                                <!-- Transpiled Python Viewer (Spacious with line numbers) -->
+                                <div class="studio-editor-wrapper" id="studio-python-view" style="display: none;">
+                                    <div class="line-numbers" id="upload-python-lines">1</div>
+                                    <pre id="upload-python-output" class="code-box has-lines studio-pre">Generated Python code will appear here...</pre>
                                 </div>
                             </div>
+                        
+                            
                         </div>
                     </div>
                 </div>

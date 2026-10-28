@@ -5,6 +5,7 @@ from transpiler.codegen import CodeGenerator
 from transpiler.ai_module import AIModule
 from transpiler.execution import ExecutionModule
 
+
 def ast_to_dict(node):
     if node is None:
         return None

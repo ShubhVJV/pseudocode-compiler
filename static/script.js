@@ -534,7 +534,7 @@ mermaid.initialize({ startOnLoad: false, theme: 'default' });
 let editorFlow = null;
 let currentMode = 'pseudocode';
 
-function switchMode(mode, element) {
+function switchMode(mode, element, options = {}) {
     currentMode = mode;
     document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
     if(element) element.classList.add('active');
@@ -622,7 +622,10 @@ function switchMode(mode, element) {
             'pseudocode': 'Pseudocode Input',
             'tamil': 'Tamil / Tanglish Input'
         };
-        document.getElementById('source-code').value = langMap[mode] || '';
+        const preserveCode = options && options.preserveCode;
+        if (!preserveCode) {
+            document.getElementById('source-code').value = langMap[mode] || '';
+        }
         document.getElementById('editor-title').innerText = titleMap[mode] || 'Input';
         updateLineNumbers(document.getElementById('source-code'), document.getElementById('editor-lines'));
     }
@@ -734,8 +737,30 @@ const previewFilesize = document.getElementById('preview-filesize');
 const btnRemovePreview = document.getElementById('btn-remove-preview');
 const btnProcessUpload = document.getElementById('btn-process-upload');
 const uploadStatusBox = document.getElementById('upload-status-box');
+const uploadStatusPill = document.getElementById('upload-status-pill');
+const btnZoomFit = document.getElementById('btn-zoom-fit');
+
+// Studio Code Elements
+const tabBtnExtractedPseudo = document.getElementById('tab-btn-extracted-pseudo');
+const tabBtnExtractedPython = document.getElementById('tab-btn-extracted-python');
+const extractedCodeTabLabel = document.getElementById('extracted-code-tab-label');
+const btnCopyExtractedCode = document.getElementById('btn-copy-extracted-code');
+const btnOpenInEditor = document.getElementById('btn-open-in-editor');
+const studioEmptyState = document.getElementById('studio-empty-state');
+const studioPseudoView = document.getElementById('studio-pseudo-view');
+const studioPythonView = document.getElementById('studio-python-view');
+const uploadCodeOutput = document.getElementById('upload-code-output');
+const uploadCodeLines = document.getElementById('upload-code-lines');
+const uploadPythonOutput = document.getElementById('upload-python-output');
+const uploadPythonLines = document.getElementById('upload-python-lines');
+const uploadBtnExecute = document.getElementById('upload-btn-execute');
+const uploadStdin = document.getElementById('upload-stdin');
+const uploadExecutionOutput = document.getElementById('upload-execution-output');
+const uploadExecStatus = document.getElementById('upload-exec-status');
 
 let activeFlowchartFile = null;
+let lastExtractedResult = null;
+let currentUploadTab = 'pseudocode';
 
 function displayUploadedImage(src, name, sizeFormatted) {
     if (previewImage) previewImage.src = src;
@@ -747,17 +772,221 @@ function displayUploadedImage(src, name, sizeFormatted) {
         uploadStatusBox.style.display = 'none';
         uploadStatusBox.className = 'info-box';
     }
+    if (uploadStatusPill) {
+        uploadStatusPill.innerHTML = '<i class="fa-solid fa-image"></i> Image Ready';
+        uploadStatusPill.className = 'badge upload-badge-ready';
+    }
 }
 
 function resetUploadPreview() {
     activeFlowchartFile = null;
+    lastExtractedResult = null;
     if (flowchartFileInput) flowchartFileInput.value = '';
-    if (previewImage) previewImage.src = '';
+    if (previewImage) {
+        previewImage.src = '';
+        previewImage.style.maxWidth = '100%';
+        previewImage.style.maxHeight = '100%';
+    }
     if (dropzonePrompt) dropzonePrompt.style.display = 'flex';
     if (uploadPreviewArea) uploadPreviewArea.style.display = 'none';
     if (uploadStatusBox) uploadStatusBox.style.display = 'none';
+    
+    // Reset Studio Right Pane
+    if (studioEmptyState) studioEmptyState.style.display = 'flex';
+    if (studioPseudoView) studioPseudoView.style.display = 'none';
+    if (studioPythonView) studioPythonView.style.display = 'none';
+    if (uploadCodeOutput) uploadCodeOutput.value = '';
+    if (uploadPythonOutput) uploadPythonOutput.innerText = 'Generated Python code will appear here...';
+    if (uploadBtnExecute) uploadBtnExecute.disabled = true;
+    if (uploadExecutionOutput) {
+        uploadExecutionOutput.innerText = 'Program output will be displayed here...';
+        uploadExecutionOutput.style.color = 'inherit';
+    }
+    if (uploadExecStatus) uploadExecStatus.style.display = 'none';
+    if (uploadStatusPill) {
+        uploadStatusPill.innerHTML = '<i class="fa-solid fa-circle-check"></i> Ready';
+        uploadStatusPill.className = 'badge upload-badge-ready';
+    }
 }
 
+function switchUploadTab(tab) {
+    currentUploadTab = tab;
+    if (tab === 'pseudocode') {
+        if (tabBtnExtractedPseudo) tabBtnExtractedPseudo.classList.add('active');
+        if (tabBtnExtractedPython) tabBtnExtractedPython.classList.remove('active');
+        if (lastExtractedResult) {
+            if (studioPseudoView) studioPseudoView.style.display = 'flex';
+            if (studioPythonView) studioPythonView.style.display = 'none';
+            if (studioEmptyState) studioEmptyState.style.display = 'none';
+            if (uploadCodeOutput && uploadCodeLines) updateLineNumbers(uploadCodeOutput, uploadCodeLines);
+        }
+    } else {
+        if (tabBtnExtractedPython) tabBtnExtractedPython.classList.add('active');
+        if (tabBtnExtractedPseudo) tabBtnExtractedPseudo.classList.remove('active');
+        if (lastExtractedResult) {
+            if (studioPythonView) studioPythonView.style.display = 'flex';
+            if (studioPseudoView) studioPseudoView.style.display = 'none';
+            if (studioEmptyState) studioEmptyState.style.display = 'none';
+            if (uploadPythonOutput && uploadPythonLines) updateLineNumbers({ value: uploadPythonOutput.innerText }, uploadPythonLines);
+        }
+    }
+}
+
+function copyExtractedCode() {
+    let textToCopy = '';
+    if (currentUploadTab === 'python') {
+        textToCopy = uploadPythonOutput ? uploadPythonOutput.innerText : '';
+    } else {
+        textToCopy = uploadCodeOutput ? uploadCodeOutput.value : '';
+    }
+    
+    if (!textToCopy || textToCopy.includes('will appear here')) {
+        return;
+    }
+    
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        if (btnCopyExtractedCode) {
+            const originalHtml = btnCopyExtractedCode.innerHTML;
+            btnCopyExtractedCode.innerHTML = '<i class="fa-solid fa-check" style="color: var(--accent-green)"></i> Copied!';
+            setTimeout(() => {
+                btnCopyExtractedCode.innerHTML = originalHtml;
+            }, 1600);
+        }
+    }).catch(err => {
+        console.error('Copy failed:', err);
+    });
+}
+
+function openExtractedInEditor() {
+    const currentCode = uploadCodeOutput ? uploadCodeOutput.value : '';
+    if (!currentCode.trim()) {
+        alert("Please extract a flowchart first before opening in editor.");
+        return;
+    }
+
+    const target = document.getElementById('output-target-select') ? document.getElementById('output-target-select').value : 'pseudocode';
+
+    if (target === 'drawflow') {
+        const navEl = document.querySelector('.nav-links li[data-mode="flowchart"]');
+        switchMode('flowchart', navEl);
+        if (editorFlow && lastExtractedResult && lastExtractedResult.drawflow_data && lastExtractedResult.drawflow_data.drawflow) {
+            try {
+                editorFlow.import(lastExtractedResult.drawflow_data);
+            } catch (e) {
+                console.error("Failed to import to drawflow:", e);
+            }
+        }
+        return;
+    }
+
+    const modeToOpen = target === 'tamil' ? 'tamil' : 'pseudocode';
+    const navEl = document.querySelector(`.nav-links li[data-mode="${modeToOpen}"]`);
+
+    // Switch mode with preserveCode flag so existing code is NOT overwritten with placeholder
+    switchMode(modeToOpen, navEl, { preserveCode: true });
+
+    // Populate the source code editor with current extracted / edited code
+    editor.value = currentCode;
+    updateLineNumbers(editor, editorLines);
+
+    // Sync Standard Input
+    if (uploadStdin && uploadStdin.value) {
+        const mainStdin = document.getElementById('stdin');
+        if (mainStdin) mainStdin.value = uploadStdin.value;
+    }
+
+    // Sync Python output
+    const pythonCodeToSet = (lastExtractedResult && lastExtractedResult.python_code) || 
+                            (uploadPythonOutput && !uploadPythonOutput.innerText.includes('will appear here') ? uploadPythonOutput.innerText : '');
+    const mainPython = document.getElementById('python-output');
+    const mainPythonLines = document.getElementById('python-lines');
+    if (mainPython && pythonCodeToSet) {
+        mainPython.innerText = pythonCodeToSet;
+        if (mainPythonLines) updateLineNumbers({ value: mainPython.innerText }, mainPythonLines);
+    }
+
+    // Sync Execution Result
+    if (uploadExecutionOutput && uploadExecutionOutput.innerText && !uploadExecutionOutput.innerText.includes('will be displayed here')) {
+        const mainExec = document.getElementById('execution-output');
+        if (mainExec) {
+            mainExec.innerText = uploadExecutionOutput.innerText;
+            mainExec.style.color = uploadExecutionOutput.style.color;
+        }
+    }
+
+    // Sync pipeline and analysis inspector tabs from lastExtractedResult
+    if (lastExtractedResult) {
+        updatePipeline(lastExtractedResult);
+
+        // Tokens table
+        const tokenTbody = document.querySelector('#token-table tbody');
+        if (tokenTbody && lastExtractedResult.tokens) {
+            tokenTbody.innerHTML = '';
+            lastExtractedResult.tokens.forEach(t => {
+                tokenTbody.innerHTML += `<tr><td><span class="badge" style="background:var(--border-color)">${t.type}</span></td><td>${t.value}</td><td>${t.line}</td><td>${t.col}</td></tr>`;
+            });
+        }
+
+        // Symbol Table
+        const symbolTbody = document.querySelector('#symbol-table tbody');
+        if (symbolTbody && lastExtractedResult.symbol_table) {
+            symbolTbody.innerHTML = '';
+            lastExtractedResult.symbol_table.forEach(s => {
+                symbolTbody.innerHTML += `<tr>
+                    <td><strong>${s.name}</strong></td>
+                    <td style="color:var(--accent-green)">${s.type}</td>
+                    <td>${s.scope}</td>
+                    <td><span class="badge" style="background:var(--border-color)">${s.kind}</span></td>
+                </tr>`;
+            });
+        }
+
+        // AST Tree
+        const astContainer = document.getElementById('ast-tree-container');
+        if (astContainer && lastExtractedResult.ast_tree) {
+            astContainer.innerHTML = `<div class="ast-node">${renderAST(lastExtractedResult.ast_tree)}</div>`;
+        }
+
+        // CFG Mermaid
+        const cfgContainer = document.getElementById('cfg-container');
+        if (cfgContainer && lastExtractedResult.cfg_mermaid) {
+            try {
+                mermaid.render('mermaid-svg-' + Date.now(), lastExtractedResult.cfg_mermaid).then(({ svg }) => {
+                    cfgContainer.innerHTML = svg;
+                }).catch(err => console.error("CFG Render error:", err));
+            } catch (err) {
+                console.error("Mermaid error:", err);
+            }
+        }
+
+        // Status Badge and Diagnostics
+        const compileStatus = document.getElementById('compile-status');
+        if (compileStatus) {
+            compileStatus.className = 'status-badge success';
+            compileStatus.innerText = 'Transpiled';
+        }
+        const diagnosticsBox = document.getElementById('diagnostics-box');
+        if (diagnosticsBox) {
+            diagnosticsBox.className = 'info-box success';
+            diagnosticsBox.innerHTML = '<strong>Success:</strong> Flowchart successfully parsed and transpiled!';
+        }
+    }
+
+    // Enable execute button in sidebar
+    const btnExecute = document.getElementById('btn-execute');
+    if (btnExecute && pythonCodeToSet) btnExecute.disabled = false;
+
+    // Always compile through the main editor so the Python shown there (and run by the sidebar
+    // Execute button) is generated by the same path as normal pseudocode.
+    const btnCompile = document.getElementById('btn-compile');
+    if (btnCompile) btnCompile.click();
+
+    editor.focus();
+}
+
+
+
+// File Upload Handlers
 if (flowchartFileInput) {
     flowchartFileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
@@ -812,13 +1041,58 @@ if (btnRemovePreview) {
     });
 }
 
+if (btnZoomFit && previewImage) {
+    let isZoomed = false;
+    btnZoomFit.addEventListener('click', () => {
+        isZoomed = !isZoomed;
+        if (isZoomed) {
+            previewImage.style.maxWidth = 'none';
+            previewImage.style.maxHeight = 'none';
+            btnZoomFit.innerHTML = '<i class="fa-solid fa-compress"></i> Fit';
+        } else {
+            previewImage.style.maxWidth = '100%';
+            previewImage.style.maxHeight = '100%';
+            btnZoomFit.innerHTML = '<i class="fa-solid fa-expand"></i> Zoom';
+        }
+    });
+}
+
+// Studio Action Buttons
+if (btnCopyExtractedCode) {
+    btnCopyExtractedCode.addEventListener('click', copyExtractedCode);
+}
+
+if (btnOpenInEditor) {
+    btnOpenInEditor.addEventListener('click', openExtractedInEditor);
+}
+
+
+
+// Line Numbers & Scroll Sync for Studio Editors
+if (uploadCodeOutput && uploadCodeLines) {
+    uploadCodeOutput.addEventListener('input', () => {
+        updateLineNumbers(uploadCodeOutput, uploadCodeLines);
+    });
+    uploadCodeOutput.addEventListener('scroll', () => {
+        uploadCodeLines.scrollTop = uploadCodeOutput.scrollTop;
+    });
+}
+
+if (uploadPythonOutput && uploadPythonLines) {
+    uploadPythonOutput.addEventListener('scroll', () => {
+        uploadPythonLines.scrollTop = uploadPythonOutput.scrollTop;
+    });
+}
+
+// Primary Action: Extract & Transpile
 if (btnProcessUpload) {
     btnProcessUpload.addEventListener('click', async () => {
-        if (!uploadStatusBox) return;
         if (!previewImage || !previewImage.src || previewImage.src === '') {
-            uploadStatusBox.className = 'info-box warning';
-            uploadStatusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Please upload a flowchart image or select a sample diagram first.';
-            uploadStatusBox.style.display = 'block';
+            if (uploadStatusBox) {
+                uploadStatusBox.className = 'info-box warning';
+                uploadStatusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Please upload a flowchart image or select a sample diagram first.';
+                uploadStatusBox.style.display = 'block';
+            }
             return;
         }
 
@@ -828,9 +1102,17 @@ if (btnProcessUpload) {
 
         btnProcessUpload.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Extracting & Transpiling...';
         btnProcessUpload.disabled = true;
-        uploadStatusBox.className = 'info-box';
-        uploadStatusBox.innerHTML = '<i class="fa-solid fa-microscope"></i> Analyzing diagram geometry and extracting pseudocode...';
-        uploadStatusBox.style.display = 'block';
+
+        if (uploadStatusPill) {
+            uploadStatusPill.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Extracting...';
+            uploadStatusPill.className = 'badge upload-badge-ready';
+        }
+
+        if (uploadStatusBox) {
+            uploadStatusBox.className = 'info-box';
+            uploadStatusBox.innerHTML = '<i class="fa-solid fa-microscope"></i> Analyzing diagram geometry, detecting shapes & extracting pseudocode...';
+            uploadStatusBox.style.display = 'block';
+        }
 
         try {
             const res = await fetch('/upload_flowchart', {
@@ -847,20 +1129,64 @@ if (btnProcessUpload) {
             const data = await res.json();
 
             if (data.generated_pseudo) {
-                // Populate main editor
+                lastExtractedResult = data;
+
+                // Populate Studio Extracted Pseudocode Textarea
+                if (uploadCodeOutput) {
+                    uploadCodeOutput.value = data.generated_pseudo;
+                    if (uploadCodeLines) updateLineNumbers(uploadCodeOutput, uploadCodeLines);
+                }
+
+                // Populate Studio Transpiled Python Output
+                if (uploadPythonOutput) {
+                    if (data.python_code) {
+                        uploadPythonOutput.innerText = data.python_code;
+                    } else {
+                        uploadPythonOutput.innerText = '# Python code could not be generated.\n# The extracted pseudocode may contain unsupported syntax.\n# Try editing the pseudocode on the left and re-running.';
+                    }
+                    if (uploadPythonLines) updateLineNumbers({ value: uploadPythonOutput.innerText }, uploadPythonLines);
+                }
+
+                // Reveal Studio Code Views
+                if (studioEmptyState) studioEmptyState.style.display = 'none';
+                if (currentUploadTab === 'python') {
+                    if (studioPythonView) studioPythonView.style.display = 'flex';
+                    if (studioPseudoView) studioPseudoView.style.display = 'none';
+                } else {
+                    if (studioPseudoView) studioPseudoView.style.display = 'flex';
+                    if (studioPythonView) studioPythonView.style.display = 'none';
+                }
+
+                // Update tab title
+                if (extractedCodeTabLabel) {
+                    extractedCodeTabLabel.innerText = target === 'tamil' ? 'Extracted Tamil Code' : 'Extracted Pseudocode';
+                }
+
+                // Enable Studio Run Button only if valid Python code was generated
+                if (uploadBtnExecute) {
+                    uploadBtnExecute.disabled = !data.python_code;
+                }
+                if (uploadExecutionOutput) {
+                    uploadExecutionOutput.innerText = 'Ready to execute. Provide stdin if required (e.g. for READ A) and click "Run Code".';
+                    uploadExecutionOutput.style.color = 'inherit';
+                }
+                if (uploadExecStatus) {
+                    uploadExecStatus.style.display = 'none';
+                }
+
+                // Populate main IDE editor & output in the background so everything is synchronized
                 editor.value = data.generated_pseudo;
                 updateLineNumbers(editor, editorLines);
 
-                // Populate Python output
                 const pythonOutput = document.getElementById('python-output');
                 const pythonLines = document.getElementById('python-lines');
-                if (pythonOutput) pythonOutput.innerText = data.python_code || 'No code generated';
-                if (pythonLines && pythonOutput) updateLineNumbers({value: pythonOutput.innerText}, pythonLines);
+                if (pythonOutput) pythonOutput.innerText = data.python_code || '';
+                if (pythonLines && pythonOutput) updateLineNumbers({ value: pythonOutput.innerText }, pythonLines);
 
                 // Update pipeline visualizer & diagnostics
                 updatePipeline(data);
 
-                // Populate Tokens
+                // Populate Tokens table
                 const tokenTbody = document.querySelector('#token-table tbody');
                 if (tokenTbody && data.tokens) {
                     tokenTbody.innerHTML = '';
@@ -883,46 +1209,59 @@ if (btnProcessUpload) {
                     });
                 }
 
-                // Populate AST & CFG
+                // Populate AST
                 const astContainer = document.getElementById('ast-tree-container');
                 if (astContainer) {
                     astContainer.innerHTML = data.ast_tree ? `<div class="ast-node">${renderAST(data.ast_tree)}</div>` : 'No AST generated.';
                 }
 
-                // Enable execution button
+                // Enable sidebar execute button
                 const btnExecute = document.getElementById('btn-execute');
                 if (btnExecute && data.python_code) {
                     btnExecute.disabled = false;
                 }
 
-                const modeToOpen = target === 'tamil' ? 'tamil' : 'pseudocode';
-                uploadStatusBox.className = 'info-box success';
-                uploadStatusBox.innerHTML = `
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div><i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i> <strong>Extraction Complete!</strong> Flowchart parsed into <code>${target}</code>.</div>
-                        <div style="background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.82rem; max-height: 100px; overflow-y: auto;">
-                            ${data.generated_pseudo.replace(/\n/g, '<br>')}
+                const lineCount = data.generated_pseudo.split('\n').filter(l => l.trim().length > 0).length;
+
+                if (uploadStatusPill) {
+                    uploadStatusPill.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${lineCount} Statements Extracted`;
+                    uploadStatusPill.className = 'badge upload-badge-ready';
+                }
+
+                if (uploadStatusBox) {
+                    uploadStatusBox.className = 'info-box success';
+                    uploadStatusBox.innerHTML = `
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <div>
+                                <i class="fa-solid fa-circle-check" style="color: var(--accent-green)"></i>
+                                <strong>Extraction Complete!</strong> Flowchart parsed into <code>${target}</code> (${lineCount} lines).
+                            </div>
                         </div>
-                        <div style="display: flex; gap: 10px; margin-top: 5px;">
-                            <button type="button" class="btn secondary-btn btn-sm" onclick="switchMode('${modeToOpen}', document.querySelector('.nav-links li[data-mode=${modeToOpen}]'))">
-                                <i class="fa-solid fa-laptop-code"></i> Open Code & Output View
-                            </button>
-                            <button type="button" class="btn primary-btn btn-sm" onclick="document.getElementById('btn-execute').click()">
-                                <i class="fa-solid fa-play"></i> Execute Now
-                            </button>
-                        </div>
-                    </div>
-                `;
+                    `;
+                }
             } else if (data.error) {
-                uploadStatusBox.className = 'info-box error';
-                uploadStatusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <strong>Backend Error:</strong> ${data.error}`;
+                if (uploadStatusBox) {
+                    uploadStatusBox.className = 'info-box error';
+                    uploadStatusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <strong>Backend Error:</strong> ${data.error}`;
+                }
+                if (uploadStatusPill) {
+                    uploadStatusPill.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Extraction Error';
+                    uploadStatusPill.className = 'badge';
+                }
             } else {
-                uploadStatusBox.className = 'info-box warning';
-                uploadStatusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Could not extract valid statements from flowchart. Try a different image or engine.';
+                if (uploadStatusBox) {
+                    uploadStatusBox.className = 'info-box warning';
+                    uploadStatusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Could not extract valid statements from flowchart. Try another recognition engine or image.';
+                }
             }
         } catch (err) {
-            uploadStatusBox.className = 'info-box error';
-            uploadStatusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Failed to process flowchart: ${err.message}`;
+            if (uploadStatusBox) {
+                uploadStatusBox.className = 'info-box error';
+                uploadStatusBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Failed to process flowchart: ${err.message}`;
+            }
+            if (uploadStatusPill) {
+                uploadStatusPill.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Failed';
+            }
         } finally {
             btnProcessUpload.innerHTML = origBtnText;
             btnProcessUpload.disabled = false;

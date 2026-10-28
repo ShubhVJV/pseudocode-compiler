@@ -1,7 +1,29 @@
 from transpiler.ast_nodes import *
 
+# Emitted once at the top of any generated program that uses READ.
+_READ_HELPER = '''import sys as _sys
+
+_input_buffer = []
+
+
+def _read():
+    while not _input_buffer:
+        line = _sys.stdin.readline()
+        if not line:
+            raise EOFError("Program tried to read more input than was provided")
+        _input_buffer.extend(line.split())
+    tok = _input_buffer.pop(0)
+    for cast in (int, float):
+        try:
+            return cast(tok)
+        except ValueError:
+            pass
+    return tok
+'''
+
 class CodeGenerator:
     def __init__(self):
+        self.uses_read = False
         self.code = []
         self.indent_level = 0
         self.imports = set()
@@ -16,6 +38,8 @@ class CodeGenerator:
             final_code += f"import {imp}\n"
         if self.imports:
             final_code += "\n"
+        if self.uses_read:
+            final_code += _READ_HELPER + "\n\n"
         final_code += "\n".join(self.code)
         return final_code
 
@@ -54,7 +78,8 @@ class CodeGenerator:
         self.add_line(f"print({', '.join(exprs)})")
 
     def visit_Read(self, node):
-        self.add_line(f"{node.name} = input()")
+        self.uses_read = True
+        self.add_line(f"{node.name} = _read()")
 
     def visit_IfStmt(self, node):
         cond_str = self.visit(node.condition)
